@@ -197,11 +197,11 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:#777;font-size:11px
         <h3>FEAR 3.0</h3>
         <p>Two sound worlds. One instrument. Explore the Demon Core and Ghost Core in a cinematic sound-design instrument.</p>
         <div class="wave"></div>
-        <a class="btn primary"
-           href="mailto:dpaul230699@gmail.com?subject=FEAR%203.0%20Purchase%20Enquiry&body=Hello%20MIX10%20BEATS%2C%0A%0AI%20would%20like%20to%20purchase%20FEAR%203.0%20(₹999).%0A%0APlease%20send%20the%20payment%20method%20and%20secure%20download%20instructions.%0A%0AThank%20you.">
-          GET FEAR 3.0 · ₹999
-        </a>
-        <p class="download-note">Click to email the studio for payment details and your download. Ask about the 50% launch offer and include your YouTube and Instagram profile links for manual verification.</p>
+        <button class="btn primary" id="buy-fear" type="button">
+          BUY FEAR 3.0 · ₹999
+        </button>
+        <p class="download-note">Secure Razorpay checkout · Test mode during setup. The 50% launch offer is handled manually after profile verification.</p>
+        <p class="download-note" id="fear-payment-status" role="status" aria-live="polite"></p>
       </article>
 
       <article class="product ghost">
@@ -239,7 +239,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:#777;font-size:11px
 
       <p class="download-note">Windows · Version 8.0 · Free edition</p>
        <p class="download-note">Free download. Want to support future development? Email the studio to ask about voluntary support options.</p>
-       <p class="download-note"><a href="mailto:dpaul230699@gmail.com?subject=Support%20MIX10%20BEATS">Support MIX10 BEATS</a></p>
+       <p class="download-note"><a href="https://mail.google.com/mail/?view=cm&fs=1&to=dpaul230699%40gmail.com&su=Support%20MIX10%20BEATS" target="_blank" rel="noopener">Support MIX10 BEATS</a></p>
       <p class="download-note">Please read the included instructions before installation.</p>
     </div>
   </div>
@@ -293,7 +293,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:#777;font-size:11px
         <p>Contact MIX10 BEATS for music production, sound design and product enquiries.</p>
       </div>
       <div class="actions">
-        <a class="btn primary" href="mailto:dpaul230699@gmail.com?subject=MIX10%20BEATS%20Enquiry&body=Hello%20MIX10%20BEATS%2C%0A%0AI%20would%20like%20to%20enquire%20about%20your%20music%20production%2C%20sound%20design%20or%20audio%20tools.%0A%0AThank%20you.">Email the studio</a>
+        <a class="btn primary" href="https://mail.google.com/mail/?view=cm&fs=1&to=dpaul230699%40gmail.com&su=MIX10%20BEATS%20Enquiry&body=Hello%20MIX10%20BEATS%2C%0A%0AI%20would%20like%20to%20enquire%20about%20your%20music%20production%2C%20sound%20design%20or%20audio%20tools.%0A%0AThank%20you." target="_blank" rel="noopener">Email the studio</a>
       </div>
     </div>
   </div>
@@ -308,8 +308,93 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:#777;font-size:11px
   </div>
 </footer>
 
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>
 document.getElementById('year').textContent = new Date().getFullYear();
+
+const fearButton = document.getElementById('buy-fear');
+const fearStatus = document.getElementById('fear-payment-status');
+
+fearButton.addEventListener('click', async () => {
+  fearButton.disabled = true;
+  fearButton.textContent = 'PLEASE WAIT...';
+  fearStatus.textContent = 'Creating your secure test order...';
+
+  try {
+    const orderResponse = await fetch('/api/create-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+
+    const orderData = await orderResponse.json();
+    if (!orderResponse.ok || !orderData.order_id || !orderData.key_id) {
+      throw new Error(orderData.error || 'Could not create Razorpay order. Check the Cloudflare Pages Function and test keys.');
+    }
+
+    if (typeof Razorpay === 'undefined') {
+      throw new Error('Razorpay Checkout could not load. Please allow the checkout script and refresh.');
+    }
+
+    const checkout = new Razorpay({
+      key: orderData.key_id,
+      amount: orderData.amount,
+      currency: orderData.currency || 'INR',
+      name: 'MIX10 BEATS',
+      description: 'FEAR 3.0',
+      order_id: orderData.order_id,
+      handler: async function (paymentResponse) {
+        fearStatus.textContent = 'Payment received. Verifying with Razorpay...';
+        try {
+          const verifyResponse = await fetch('/api/verify-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              razorpay_order_id: paymentResponse.razorpay_order_id,
+              razorpay_payment_id: paymentResponse.razorpay_payment_id,
+              razorpay_signature: paymentResponse.razorpay_signature
+            })
+          });
+          const verifyData = await verifyResponse.json();
+          if (!verifyResponse.ok || !verifyData.verified) {
+            throw new Error(verifyData.error || 'Payment verification failed. Contact MIX10 BEATS with your payment ID.');
+          }
+          fearStatus.textContent = 'Test payment verified successfully. No FEAR download is configured yet.';
+          alert('Razorpay test payment verified. This was a test transaction; no real money was charged.');
+        } catch (verificationError) {
+          fearStatus.textContent = verificationError.message;
+          alert(verificationError.message);
+        } finally {
+          fearButton.disabled = false;
+          fearButton.textContent = 'BUY FEAR 3.0 · ₹999';
+        }
+      },
+      modal: {
+        ondismiss: function () {
+          fearStatus.textContent = 'Checkout closed. No payment was completed.';
+          fearButton.disabled = false;
+          fearButton.textContent = 'BUY FEAR 3.0 · ₹999';
+        }
+      },
+      theme: { color: '#ff4b2b' }
+    });
+
+    checkout.on('payment.failed', function (response) {
+      fearStatus.textContent = response.error && response.error.description
+        ? response.error.description
+        : 'Payment failed. Please try again.';
+      fearButton.disabled = false;
+      fearButton.textContent = 'BUY FEAR 3.0 · ₹999';
+    });
+
+    checkout.open();
+  } catch (error) {
+    fearStatus.textContent = error.message || 'Checkout could not start.';
+    fearButton.disabled = false;
+    fearButton.textContent = 'BUY FEAR 3.0 · ₹999';
+  }
+});
 </script>
 
 </body>
