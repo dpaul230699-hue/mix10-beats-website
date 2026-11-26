@@ -356,12 +356,43 @@ fearButton.addEventListener('click', async () => {
               razorpay_signature: paymentResponse.razorpay_signature
             })
           });
-          const verifyData = await verifyResponse.json();
-          if (!verifyResponse.ok || !verifyData.verified) {
-            throw new Error(verifyData.error || 'Payment verification failed. Contact MIX10 BEATS with your payment ID.');
-          }
-          fearStatus.textContent = 'Test payment verified successfully. No FEAR download is configured yet.';
-          alert('Razorpay test payment verified. This was a test transaction; no real money was charged.');
+         const verifyData = await verifyResponse.json();
+
+if (!verifyResponse.ok || !verifyData.verified) {
+  throw new Error(
+    verifyData.error || 'Payment verification failed.'
+  );
+}
+
+if (verifyData.test_mode) {
+  fearStatus.textContent =
+    'Test payment verified successfully. No real download was issued.';
+
+  alert(
+    'Test payment verified successfully. No real money was charged.'
+  );
+
+  return;
+}
+
+if (
+  typeof verifyData.download_url !== 'string' ||
+  !verifyData.download_url.startsWith('/api/download-fear?token=')
+) {
+  throw new Error('Secure download link was not received.');
+}
+
+fearStatus.textContent =
+  'Payment verified! Your FEAR 3.0 download is ready. ';
+
+const downloadLink = document.createElement('a');
+downloadLink.href = verifyData.download_url;
+downloadLink.textContent = 'Download FEAR 3.0';
+downloadLink.style.display = 'inline-block';
+downloadLink.style.marginTop = '12px';
+downloadLink.style.fontWeight = 'bold';
+
+fearStatus.appendChild(downloadLink);
         } catch (verificationError) {
           fearStatus.textContent = verificationError.message;
           alert(verificationError.message);
