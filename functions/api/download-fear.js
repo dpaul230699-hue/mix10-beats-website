@@ -120,21 +120,21 @@ export async function onRequestGet({ request, env }) {
 
     const now = Math.floor(Date.now() / 1000);
 
-    // Atomically reserve one of the three download attempts.
-    const update = await env.DB.prepare(
-      `UPDATE fear_downloads
-       SET download_count = download_count + 1
-       WHERE download_token = ?
-       AND expires_at > ?
-       AND download_count < 3`
-    ).bind(token, now).run();
+    // Check eligibility without consuming a download attempt.
+const record = await env.DB.prepare(
+  `SELECT payment_id, expires_at, download_count
+   FROM fear_downloads
+   WHERE download_token = ?
+   AND expires_at > ?
+   AND download_count < 3`
+).bind(token, now).first();
 
-    if (!update.meta || update.meta.changes !== 1) {
-      return new Response(
-        "Download link invalid, expired, or limit reached",
-        { status: 403 }
-      );
-    }
+if (!record) {
+  return new Response(
+    "Download link invalid, expired, or limit reached",
+    { status: 403 }
+  );
+}
 
     const serviceAccount = JSON.parse(
       env.GOOGLE_SERVICE_ACCOUNT_JSON
@@ -158,6 +158,20 @@ export async function onRequestGet({ request, env }) {
       });
     }
 
+    // Count only when Google Drive is ready.
+const countUpdate = await env.DB.prepare(
+  `UPDATE fear_downloads
+   SET download_count = download_count + 1
+   WHERE download_token = ?
+   AND expires_at > ?
+   AND download_count < 3`
+).bind(token, now).run();
+
+if (!countUpdate.meta || countUpdate.meta.changes !== 1) {
+  return new Response("Download limit reached or link expired", {
+    status: 403
+  });
+}
     const headers = new Headers({
       "Content-Type": "application/vnd.rar",
       "Content-Disposition": 'attachment; filename="FEAR_3.0.rar"',
